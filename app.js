@@ -1,15 +1,16 @@
 const { TwitterApi } = require('twitter-api-v2');
 const axios = require('axios');
 
-// Load environment variables from Railway
+// Load environment variables
 const TWITTER_BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN;
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
 
 // Create a Twitter client
 const twitterClient = new TwitterApi(TWITTER_BEARER_TOKEN);
 
-// Global variable to store the stream instance
+// Global variables for stream management
 let streamInstance;
+let isShuttingDown = false;
 
 // Function to build the full tweet text using note_tweet and referenced tweets
 function getFullTweetText(tweet, includes) {
@@ -44,7 +45,7 @@ function getFullTweetText(tweet, includes) {
   return fullText;
 }
 
-// Function to send tweet data to Google Apps Script webhook
+// Function to send tweet data to the webhook
 async function forwardTweet(tweet, includes) {
   // Get the actual username from expanded user details
   const user = includes.users.find(user => user.id === tweet.author_id);
@@ -65,47 +66,76 @@ async function forwardTweet(tweet, includes) {
     await axios.post(WEBHOOK_URL, payload);
     console.log(`Tweet ${tweet.id} from @${username} forwarded.`);
   } catch (error) {
-    console.error(`Error sending tweet ${tweet.id}:`, error.response ? error.response.data : error.message);
+    console.error(
+      `Error sending tweet ${tweet.id}:`,
+      error.response ? error.response.data : error.message
+    );
   }
 }
 
-// Connect to Twitter’s filtered stream and listen for new tweets
+// Function to initiate the stream connection with guard check and error handling
 async function startStream() {
+  if (streamInstance) {
+    console.log('Stream is already active.');
+    return;
+  }
   try {
-    // Start the stream with additional tweet fields and expansions for referenced tweets
     streamInstance = await twitterClient.v2.searchStream({
       'tweet.fields': 'created_at,conversation_id,note_tweet,referenced_tweets',
       'user.fields': 'username',
       expansions: 'author_id,referenced_tweets.id'
     });
-
+    console.log('Connected to Twitter stream.');
     for await (const { data, includes } of streamInstance) {
-      let usernameForLog = (includes && includes.users && includes.users[0]) ? includes.users[0].username : "unknown";
+      const usernameForLog = (includes && includes.users && includes.users[0])
+        ? includes.users[0].username
+        : "unknown";
       console.log(`New tweet detected: ${data.id} from @${usernameForLog}`);
       await forwardTweet(data, includes);
     }
   } catch (error) {
-    // If the error is due to an abort (shutdown), log it accordingly.
     if (error.name === 'AbortError') {
       console.log('Stream aborted.');
     } else {
       console.error('Stream error:', error);
     }
+  } finally {
+    // Ensure the connection is properly closed and clean up the instance
+    if (streamInstance && typeof streamInstance.destroy === 'function') {
+      try {
+        streamInstance.destroy();
+      } catch (err) {
+        console.error("Error destroying stream:", err);
+      }
+    }
+    streamInstance = null;
   }
 }
 
-// Graceful shutdown logic: close the stream when the process is signaled to stop.
+// Function to manage reconnections; runs until a shutdown is requested.
+async function runStream() {
+  while (!isShuttingDown) {
+    await startStream();
+    if (!isShuttingDown) {
+      console.log('Stream disconnected. Reconnecting in 30 seconds...');
+      await new Promise(resolve => setTimeout(resolve, 30000));
+    }
+  }
+}
+
+// Graceful shutdown: close the stream and exit.
 function shutdown() {
+  isShuttingDown = true;
   console.log('Shutdown initiated. Closing Twitter stream...');
   if (streamInstance && typeof streamInstance.destroy === 'function') {
-    streamInstance.destroy(); // Properly terminates the connection.
+    streamInstance.destroy();
   }
   process.exit(0);
 }
 
-// Listen for termination signals (Railway or local process manager)
+// Listen for termination signals
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
-// Start the stream listener
-startStream();
+// Start the stream management loop
+runStream();
