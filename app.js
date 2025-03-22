@@ -12,6 +12,9 @@ const twitterClient = new TwitterApi(TWITTER_BEARER_TOKEN);
 let streamInstance;
 let isShuttingDown = false;
 
+// Define inactivity timeout (30 minutes)
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes in ms
+
 // Function to build the full tweet text using note_tweet and referenced tweets
 function getFullTweetText(tweet, includes) {
   // Use note_tweet if available, else tweet.text
@@ -73,12 +76,26 @@ async function forwardTweet(tweet, includes) {
   }
 }
 
-// Function to initiate the stream connection with guard check and error handling
+// Function to initiate the stream connection with guard check, inactivity monitor, and error handling
 async function startStream() {
   if (streamInstance) {
     console.log('Stream is already active.');
     return;
   }
+  
+  let inactivityTimer;
+
+  // Function to reset inactivity timer
+  const resetInactivityTimer = () => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      console.log('No tweets received for 30 minutes. Restarting stream...');
+      if (streamInstance && typeof streamInstance.destroy === 'function') {
+        streamInstance.destroy();
+      }
+    }, INACTIVITY_TIMEOUT);
+  };
+
   try {
     streamInstance = await twitterClient.v2.searchStream({
       'tweet.fields': 'created_at,conversation_id,note_tweet,referenced_tweets',
@@ -86,21 +103,26 @@ async function startStream() {
       expansions: 'author_id,referenced_tweets.id'
     });
     console.log('Connected to Twitter stream.');
+    
+    // Start the inactivity timer
+    resetInactivityTimer();
+    
     for await (const { data, includes } of streamInstance) {
       const usernameForLog = (includes && includes.users && includes.users[0])
         ? includes.users[0].username
         : "unknown";
       console.log(`New tweet detected: ${data.id} from @${usernameForLog}`);
+      resetInactivityTimer();  // Reset timer on each tweet
       await forwardTweet(data, includes);
     }
   } catch (error) {
-    if (error.name === 'AbortError') {
+    if (error && error.name === 'AbortError') {
       console.log('Stream aborted.');
     } else {
       console.error('Stream error:', error);
     }
   } finally {
-    // Ensure the connection is properly closed and clean up the instance
+    if (inactivityTimer) clearTimeout(inactivityTimer);
     if (streamInstance && typeof streamInstance.destroy === 'function') {
       try {
         streamInstance.destroy();
