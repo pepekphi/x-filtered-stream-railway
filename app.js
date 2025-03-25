@@ -19,6 +19,13 @@ const INACTIVITY_TIMEOUT = 1800000; // 30 minutes in ms
 function getFullTweetText(tweet, includes) {
   let fullText = tweet.note_tweet && tweet.note_tweet.text ? tweet.note_tweet.text : tweet.text;
 
+  // Replace t.co URLs in the main tweet text with display URLs if available.
+  if (tweet.entities && tweet.entities.urls) {
+    tweet.entities.urls.forEach(urlEntity => {
+      fullText = fullText.replace(urlEntity.url, urlEntity.display_url);
+    });
+  }
+
   if (tweet.referenced_tweets && includes && includes.tweets) {
     tweet.referenced_tweets.forEach(refTweet => {
       let referencedTweet = includes.tweets.find(t => t.id === refTweet.id);
@@ -26,6 +33,12 @@ function getFullTweetText(tweet, includes) {
         let referencedFullText = referencedTweet.note_tweet && referencedTweet.note_tweet.text
           ? referencedTweet.note_tweet.text
           : referencedTweet.text;
+        // Replace t.co URLs in referenced tweet text with display URLs if available.
+        if (referencedTweet.entities && referencedTweet.entities.urls) {
+          referencedTweet.entities.urls.forEach(urlEntity => {
+            referencedFullText = referencedFullText.replace(urlEntity.url, urlEntity.display_url);
+          });
+        }
         referencedFullText = referencedFullText.replace(/\n/g, " ");
         if (refTweet.type === "quoted") {
           let quotedUser = includes.users.find(u => u.id === referencedTweet.author_id);
@@ -90,7 +103,7 @@ async function startStream() {
 
   try {
     streamInstance = await twitterClient.v2.searchStream({
-      'tweet.fields': 'created_at,conversation_id,note_tweet,referenced_tweets',
+      'tweet.fields': 'created_at,conversation_id,note_tweet,referenced_tweets,entities',
       'user.fields': 'username',
       expansions: 'author_id,referenced_tweets.id'
     });
