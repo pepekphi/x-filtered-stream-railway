@@ -19,10 +19,13 @@ const INACTIVITY_TIMEOUT = 1800000; // 30 minutes in ms
 function getFullTweetText(tweet, includes) {
   let fullText = tweet.note_tweet && tweet.note_tweet.text ? tweet.note_tweet.text : tweet.text;
 
-  // Replace t.co URLs in the main tweet text with display URLs if available.
+  // Replace t.co URLs in the main tweet text with display URLs if available
+  // Only replace if the display_url does not contain an ellipsis ("…")
   if (tweet.entities && tweet.entities.urls) {
     tweet.entities.urls.forEach(urlEntity => {
-      fullText = fullText.replace(urlEntity.url, urlEntity.display_url);
+      if (!urlEntity.display_url.includes("…")) {
+        fullText = fullText.replace(urlEntity.url, urlEntity.display_url);
+      }
     });
   }
 
@@ -33,10 +36,12 @@ function getFullTweetText(tweet, includes) {
         let referencedFullText = referencedTweet.note_tweet && referencedTweet.note_tweet.text
           ? referencedTweet.note_tweet.text
           : referencedTweet.text;
-        // Replace t.co URLs in referenced tweet text with display URLs if available.
+        // Replace t.co URLs in referenced tweet text with display URLs if available
         if (referencedTweet.entities && referencedTweet.entities.urls) {
           referencedTweet.entities.urls.forEach(urlEntity => {
-            referencedFullText = referencedFullText.replace(urlEntity.url, urlEntity.display_url);
+            if (!urlEntity.display_url.includes("…")) {
+              referencedFullText = referencedFullText.replace(urlEntity.url, urlEntity.display_url);
+            }
           });
         }
         referencedFullText = referencedFullText.replace(/\n/g, " ");
