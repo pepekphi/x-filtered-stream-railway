@@ -68,10 +68,11 @@ async function forwardTweet(tweet, includes) {
 
   const fullTweetText = getFullTweetText(tweet, includes);
 
-  // Added logic for tweetExpandedURL: if tweet.entities.urls exists and has at least one entry,
-  // use the first expanded_url, otherwise send an empty string.
+  // If tweet.entities.urls exists and has at least one entry, select the expanded_url with the most characters.
   const tweetExpandedURL = tweet.entities && tweet.entities.urls && tweet.entities.urls.length > 0
-    ? tweet.entities.urls[0].expanded_url
+    ? tweet.entities.urls.reduce((max, current) => {
+        return current.expanded_url.length > max.expanded_url.length ? current : max;
+      }, tweet.entities.urls[0]).expanded_url
     : "";
 
   const payload = {
