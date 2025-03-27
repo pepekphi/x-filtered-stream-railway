@@ -17,20 +17,24 @@ const INACTIVITY_TIMEOUT = 1800000; // 30 minutes in ms
 
 // Function to build the full tweet text using note_tweet and referenced tweets
 function getFullTweetText(tweet, includes) {
+  // Global flag to ensure a maximum of one non-picture link conversion is performed across main and referenced tweets.
+  let conversionPerformed = false;
   let fullText = tweet.note_tweet && tweet.note_tweet.text ? tweet.note_tweet.text : tweet.text;
 
-  // Replace t.co URLs in the main tweet text:
-  // - For non-picture links: if expanded_url is 170 characters or less, use it; otherwise, keep the short t.co URL.
+  // Process main tweet URLs:
+  // For non-picture links, try converting candidates until one qualifies.
   if (tweet.entities && tweet.entities.urls) {
-    tweet.entities.urls.forEach(urlEntity => {
-      if (!(urlEntity.display_url.includes("pic.x.com"))) {
+    for (const urlEntity of tweet.entities.urls) {
+      if (!conversionPerformed && !(urlEntity.display_url.includes("pic.") || urlEntity.display_url.includes("pic.twitter.com"))) {
         if (urlEntity.expanded_url && urlEntity.expanded_url.length <= 170) {
           fullText = fullText.replace(urlEntity.url, urlEntity.expanded_url);
+          conversionPerformed = true;
         }
       }
-    });
+    }
   }
 
+  // Process referenced tweets only if no conversion has been performed yet.
   if (tweet.referenced_tweets && includes && includes.tweets) {
     tweet.referenced_tweets.forEach(refTweet => {
       let referencedTweet = includes.tweets.find(t => t.id === refTweet.id);
@@ -38,15 +42,17 @@ function getFullTweetText(tweet, includes) {
         let referencedFullText = referencedTweet.note_tweet && referencedTweet.note_tweet.text
           ? referencedTweet.note_tweet.text
           : referencedTweet.text;
-        // Replace t.co URLs in referenced tweet text with similar logic as above
-        if (referencedTweet.entities && referencedTweet.entities.urls) {
-          referencedTweet.entities.urls.forEach(urlEntity => {
-            if (!(urlEntity.display_url.includes("pic.x.com"))) {
+        // Try converting a non-picture link if one hasn't been converted already.
+        if (!conversionPerformed && referencedTweet.entities && referencedTweet.entities.urls) {
+          for (const urlEntity of referencedTweet.entities.urls) {
+            if (!conversionPerformed && !(urlEntity.display_url.includes("pic.x.com"))) {
               if (urlEntity.expanded_url && urlEntity.expanded_url.length <= 170) {
                 referencedFullText = referencedFullText.replace(urlEntity.url, urlEntity.expanded_url);
+                conversionPerformed = true;
+                break;
               }
             }
-          });
+          }
         }
         referencedFullText = referencedFullText.replace(/\n/g, " ");
         if (refTweet.type === "quoted") {
