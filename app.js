@@ -17,24 +17,18 @@ const INACTIVITY_TIMEOUT = 1800000; // 30 minutes in ms
 
 // Function to build the full tweet text using note_tweet and referenced tweets
 function getFullTweetText(tweet, includes) {
-  // Global flag to ensure a maximum of one non-picture link conversion is performed across main and referenced tweets.
-  let conversionPerformed = false;
   let fullText = tweet.note_tweet && tweet.note_tweet.text ? tweet.note_tweet.text : tweet.text;
 
-  // Process main tweet URLs:
-  // For non-picture links, try converting candidates until one qualifies.
+  // Replace t.co URLs in the main tweet text with display URLs if available
+  // Only replace if the display_url does not contain an ellipsis ("…")
   if (tweet.entities && tweet.entities.urls) {
-    for (const urlEntity of tweet.entities.urls) {
-      if (!conversionPerformed && !(urlEntity.display_url.includes("pic.") || urlEntity.display_url.includes("pic.twitter.com"))) {
-        if (urlEntity.expanded_url && urlEntity.expanded_url.length <= 170) {
-          fullText = fullText.replace(urlEntity.url, urlEntity.expanded_url);
-          conversionPerformed = true;
-        }
+    tweet.entities.urls.forEach(urlEntity => {
+      if (!urlEntity.display_url.includes("…")) {
+        fullText = fullText.replace(urlEntity.url, urlEntity.display_url);
       }
-    }
+    });
   }
 
-  // Process referenced tweets only if no conversion has been performed yet.
   if (tweet.referenced_tweets && includes && includes.tweets) {
     tweet.referenced_tweets.forEach(refTweet => {
       let referencedTweet = includes.tweets.find(t => t.id === refTweet.id);
@@ -42,17 +36,13 @@ function getFullTweetText(tweet, includes) {
         let referencedFullText = referencedTweet.note_tweet && referencedTweet.note_tweet.text
           ? referencedTweet.note_tweet.text
           : referencedTweet.text;
-        // Try converting a non-picture link if one hasn't been converted already.
-        if (!conversionPerformed && referencedTweet.entities && referencedTweet.entities.urls) {
-          for (const urlEntity of referencedTweet.entities.urls) {
-            if (!conversionPerformed && !(urlEntity.display_url.includes("pic.x.com"))) {
-              if (urlEntity.expanded_url && urlEntity.expanded_url.length <= 170) {
-                referencedFullText = referencedFullText.replace(urlEntity.url, urlEntity.expanded_url);
-                conversionPerformed = true;
-                break;
-              }
+        // Replace t.co URLs in referenced tweet text with display URLs if available
+        if (referencedTweet.entities && referencedTweet.entities.urls) {
+          referencedTweet.entities.urls.forEach(urlEntity => {
+            if (!urlEntity.display_url.includes("…")) {
+              referencedFullText = referencedFullText.replace(urlEntity.url, urlEntity.display_url);
             }
-          }
+          });
         }
         referencedFullText = referencedFullText.replace(/\n/g, " ");
         if (refTweet.type === "quoted") {
@@ -78,12 +68,19 @@ async function forwardTweet(tweet, includes) {
 
   const fullTweetText = getFullTweetText(tweet, includes);
 
+  // Added logic for tweetExpandedURL: if tweet.entities.urls exists and has at least one entry,
+  // use the first expanded_url, otherwise send an empty string.
+  const tweetExpandedURL = tweet.entities && tweet.entities.urls && tweet.entities.urls.length > 0
+    ? tweet.entities.urls[0].expanded_url
+    : "";
+
   const payload = {
     timestamp: tweet.created_at,
     username: username,
     tweetId: tweet.id,
     conversationId: tweet.conversation_id,
     tweetText: fullTweetText,
+    tweetExpandedURL: tweetExpandedURL,
   };
 
   try {
