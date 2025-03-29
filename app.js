@@ -95,24 +95,25 @@ async function forwardTweet(tweet, includes) {
   }
 }
 
-// Function to initiate the stream connection with guard check, inactivity monitoring, and error handling
+// Function to initiate the stream connection with a recurring inactivity check
 async function startStream() {
   if (streamInstance) {
     console.log('Stream is already active.');
     return;
   }
 
-  let inactivityTimer;
+  // Track the time of the last tweet received
+  let lastTweetTime = Date.now();
 
-  const resetInactivityTimer = () => {
-    if (inactivityTimer) clearTimeout(inactivityTimer);
-    inactivityTimer = setTimeout(() => {
+  // Set up a recurring check for inactivity every minute
+  const inactivityInterval = setInterval(() => {
+    if (Date.now() - lastTweetTime >= INACTIVITY_TIMEOUT) {
       console.log(`No data received for ${INACTIVITY_TIMEOUT / 60000} minutes. Restarting stream...`);
       if (streamInstance && typeof streamInstance.destroy === 'function') {
         streamInstance.destroy();
       }
-    }, INACTIVITY_TIMEOUT);
-  };
+    }
+  }, 60000); // check every minute
 
   try {
     streamInstance = await twitterClient.v2.searchStream({
@@ -122,10 +123,10 @@ async function startStream() {
     });
 
     console.log('Connected to Twitter stream.');
-    resetInactivityTimer();
+    lastTweetTime = Date.now(); // update on connect
 
     for await (const { data, includes } of streamInstance) {
-      resetInactivityTimer();
+      lastTweetTime = Date.now(); // update on each tweet
       const usernameForLog = (includes && includes.users && includes.users[0])
         ? includes.users[0].username
         : "unknown";
@@ -142,7 +143,7 @@ async function startStream() {
       console.error('Stream error:', error);
     }
   } finally {
-    if (inactivityTimer) clearTimeout(inactivityTimer);
+    clearInterval(inactivityInterval);
     if (streamInstance && typeof streamInstance.destroy === 'function') {
       try {
         streamInstance.destroy();
