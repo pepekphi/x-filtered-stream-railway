@@ -13,7 +13,7 @@ let streamInstance;
 let isShuttingDown = false;
 
 // Nostaleur only mode flag: when true, only tweets from username "nostaleur" will be forwarded to the webhook.
-let nostaleurOnly = true;
+// let nostaleurOnly = true;
 
 // Define inactivity timeout (set to 60 minutes)
 const INACTIVITY_TIMEOUT = 3600000; // 60 minutes in ms
@@ -70,10 +70,10 @@ async function forwardTweet(tweet, includes) {
   const username = user ? user.username : "unknown";
 
   // If nostaleurOnly mode is enabled, skip tweets that are not from "nostaleur"
-  if (nostaleurOnly && username !== "nostaleur") {
-    console.log(`Tweet ${tweet.id} from @${username} skipped due to nostaleurOnly mode.`);
-    return;
-  }
+  //if (nostaleurOnly && username !== "nostaleur") {
+    //console.log(`Tweet ${tweet.id} from @${username} skipped due to nostaleurOnly mode.`);
+    //return;
+  //}
 
   const fullTweetText = getFullTweetText(tweet, includes);
 
