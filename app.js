@@ -140,7 +140,14 @@ async function startStream() {
         ? includes.users[0].username
         : "unknown";
       console.log(`New tweet detected: ${data.id} from @${usernameForLog}`);
-      await forwardTweet(data, includes);
+
+      forwardTweet(data, includes)
+        .then(() => {
+          console.log(`Tweet ${data.id} from @${usernameForLog} forwarded asynchronously.`);
+        })
+        .catch((error) => {
+          console.error(`Error forwarding tweet ${data.id}:`, error);
+        });
     }
   } catch (error) {
     if (error && error.code === 429) {
