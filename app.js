@@ -18,6 +18,12 @@ let isShuttingDown = false;
 // Define inactivity timeout (set to 60 minutes)
 const INACTIVITY_TIMEOUT = 3600000; // 60 minutes in ms
 
+// Track the last time a tweet was received
+let lastTweetTime = Date.now();
+
+// Track the last time a restart attempt was made
+let lastRestartAttemptTime = 0;
+
 // Function to build the full tweet text using note_tweet and referenced tweets
 function getFullTweetText(tweet, includes) {
   let fullText = tweet.note_tweet && tweet.note_tweet.text ? tweet.note_tweet.text : tweet.text;
@@ -70,10 +76,10 @@ async function forwardTweet(tweet, includes) {
   const username = user ? user.username : "unknown";
 
   // If nostaleurOnly mode is enabled, skip tweets that are not from "nostaleur"
-  //if (nostaleurOnly && username !== "nostaleur") {
-    //console.log(`Tweet ${tweet.id} from @${username} skipped due to nostaleurOnly mode.`);
-    //return;
-  //}
+  // if (nostaleurOnly && username !== "nostaleur") {
+  //   console.log(`Tweet ${tweet.id} from @${username} skipped due to nostaleurOnly mode.`);
+  //   return;
+  // }
 
   const fullTweetText = getFullTweetText(tweet, includes);
 
@@ -111,16 +117,20 @@ async function startStream() {
     return;
   }
 
-  // Track the time of the last tweet received
-  let lastTweetTime = Date.now();
-
   // Set up a recurring check for inactivity every minute
   const inactivityInterval = setInterval(() => {
-    if (Date.now() - lastTweetTime >= INACTIVITY_TIMEOUT) {
+    // Only restart if:
+    // 1) At least 1 hour has passed without a tweet
+    // 2) At least 1 hour has passed since the last restart attempt
+    if (
+      Date.now() - lastTweetTime >= INACTIVITY_TIMEOUT &&
+      Date.now() - lastRestartAttemptTime >= INACTIVITY_TIMEOUT
+    ) {
       console.log(`No data received for ${INACTIVITY_TIMEOUT / 60000} minutes. Restarting stream...`);
       if (streamInstance && typeof streamInstance.destroy === 'function') {
         streamInstance.destroy();
       }
+      lastRestartAttemptTime = Date.now();
     }
   }, 60000); // check every minute
 
@@ -132,7 +142,8 @@ async function startStream() {
     });
 
     console.log('Connected to Twitter stream.');
-    lastTweetTime = Date.now(); // update on connect
+    // Update the last tweet time on connection just for clarity
+    lastTweetTime = Date.now();
 
     for await (const { data, includes } of streamInstance) {
       lastTweetTime = Date.now(); // update on each tweet
