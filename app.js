@@ -16,7 +16,7 @@ let isShuttingDown = false;
 // let nostaleurOnly = true;
 
 // Define inactivity timeout (set to 60 minutes)
-const INACTIVITY_TIMEOUT = 3600000; // 60 minutes in ms
+const INACTIVITY_TIMEOUT = 5400000; // 90 minutes in ms
 
 // Track the last time a tweet was received
 let lastTweetTime = Date.now();
