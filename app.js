@@ -21,8 +21,11 @@ const INACTIVITY_TIMEOUT = 3600000; // 60 minutes in ms
 // Track the last time a tweet was received
 let lastTweetTime = Date.now();
 
-// Track the last time a restart attempt was made
-let lastRestartAttemptTime = 0;
+// Function to force a full container restart by exiting the process.
+function forceFullRestart() {
+  console.log("Forcing full container restart...");
+  process.exit(1);
+}
 
 // Function to build the full tweet text using note_tweet and referenced tweets
 function getFullTweetText(tweet, includes) {
@@ -119,18 +122,11 @@ async function startStream() {
 
   // Set up a recurring check for inactivity every minute
   const inactivityInterval = setInterval(() => {
-    // Only restart if:
-    // 1) At least 1 hour has passed without a tweet
-    // 2) At least 1 hour has passed since the last restart attempt
-    if (
-      Date.now() - lastTweetTime >= INACTIVITY_TIMEOUT &&
-      Date.now() - lastRestartAttemptTime >= INACTIVITY_TIMEOUT
-    ) {
-      console.log(`No data received for ${INACTIVITY_TIMEOUT / 60000} minutes. Restarting stream...`);
-      if (streamInstance && typeof streamInstance.destroy === 'function') {
-        streamInstance.destroy();
-      }
-      lastRestartAttemptTime = Date.now();
+    // If 60 minutes have passed without receiving any tweets, force a full restart.
+    if (Date.now() - lastTweetTime >= INACTIVITY_TIMEOUT) {
+      console.log(`No data received for ${INACTIVITY_TIMEOUT / 60000} minutes. Forcing full container restart...`);
+      clearInterval(inactivityInterval);
+      forceFullRestart();
     }
   }, 60000); // check every minute
 
@@ -142,7 +138,7 @@ async function startStream() {
     });
 
     console.log('Connected to Twitter stream.');
-    // Update the last tweet time on connection just for clarity
+    // Update the last tweet time on connection
     lastTweetTime = Date.now();
 
     for await (const { data, includes } of streamInstance) {
@@ -155,8 +151,9 @@ async function startStream() {
     }
   } catch (error) {
     if (error && error.code === 429) {
-      console.error("Rate limit error encountered:", error);
-      throw error;
+      console.error("Received 429 error. Forcing full container restart now.");
+      clearInterval(inactivityInterval);
+      forceFullRestart();
     } else if (error && error.name === 'AbortError') {
       console.log('Stream aborted.');
     } else {
@@ -184,12 +181,10 @@ async function runStream() {
       reconnectDelay = 30000;
     } catch (error) {
       if (error && error.code === 429) {
-        reconnectDelay = reconnectDelay < 60000 ? 60000 : reconnectDelay * 2;
-        console.error(`Received 429 error. Backing off reconnection for ${reconnectDelay / 1000} seconds.`);
+        console.error("Received 429 error in runStream. Forcing full container restart now.");
+        forceFullRestart();
       }
-    }
-    if (!isShuttingDown) {
-      console.log(`Stream disconnected. Reconnecting in ${reconnectDelay / 1000} seconds...`);
+      console.error(`Stream disconnected. Reconnecting in ${reconnectDelay / 1000} seconds...`);
       await new Promise(resolve => setTimeout(resolve, reconnectDelay));
     }
   }
