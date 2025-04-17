@@ -4,6 +4,7 @@
   "description": "Monitors X filtered stream and sends tweet data to Google Apps Script",
   "main": "app.js",
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
     "axios": "^1.3.0",
     "twitter-api-v2": "^1.12.0"
   },

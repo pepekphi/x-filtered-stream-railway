@@ -1,12 +1,16 @@
 const { TwitterApi } = require('twitter-api-v2');
+const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
 
 // Load environment variables
 const TWITTER_BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN;
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
-// Create a Twitter client
+// Create clients
 const twitterClient = new TwitterApi(TWITTER_BEARER_TOKEN);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Global variables for stream management
 let streamInstance;
@@ -69,47 +73,55 @@ function getFullTweetText(tweet, includes) {
       }
     });
   }
-
+  fullText = fullText.replace(/\n/g, ' '); // Remove line breaks
   return fullText;
 }
 
-// Function to send tweet data to the webhook
+// Function to send tweet data to the webhook and to Supabase
 async function forwardTweet(tweet, includes) {
   const user = includes.users.find(user => user.id === tweet.author_id);
   const username = user ? user.username : "unknown";
 
-  // If nostaleurOnly mode is enabled, skip tweets that are not from "nostaleur"
-  // if (nostaleurOnly && username !== "nostaleur") {
-  //   console.log(`Tweet ${tweet.id} from @${username} skipped due to nostaleurOnly mode.`);
-  //   return;
-  // }
+  let fullTweetText = getFullTweetText(tweet, includes);
+  // Ensure no line breaks
+  fullTweetText = fullTweetText.replace(/\n/g, ' ');
 
-  const fullTweetText = getFullTweetText(tweet, includes);
-
-  // If tweet.entities.urls exists and has at least one entry, select the expanded_url with the most characters.
-  const tweetExpandedURL = tweet.entities && tweet.entities.urls && tweet.entities.urls.length > 0
-    ? tweet.entities.urls.reduce((max, current) => {
-        return current.expanded_url.length > max.expanded_url.length ? current : max;
-      }, tweet.entities.urls[0]).expanded_url
-    : "";
+  const tweetExpandedURL = /* your existing logic */;
 
   const payload = {
     timestamp: tweet.created_at,
-    username: username,
+    username,
     tweetId: tweet.id,
     conversationId: tweet.conversation_id,
     tweetText: fullTweetText,
-    tweetExpandedURL: tweetExpandedURL,
+    tweetExpandedURL,
   };
 
   try {
+    // 1) Send to Google Apps Script webhook
     await axios.post(WEBHOOK_URL, payload);
-    console.log(`Tweet ${tweet.id} from @${username} forwarded.`);
-  } catch (error) {
-    console.error(
-      `Error sending tweet ${tweet.id}:`,
-      error.response ? error.response.data : error.message
-    );
+    console.log(`Tweet ${tweet.id} forwarded to webhook.`);
+
+    // 2) Insert into Supabase
+    const { error } = await supabase
+      .from('Posts')
+      .insert([{
+        post_id:       tweet.id,
+        timestamp:     tweet.created_at,
+        x_id:          tweet.author_id,
+        conversation_id: tweet.conversation_id,
+        text:          fullTweetText,
+        expanded_url:  tweetExpandedURL,
+      }]);
+
+    if (error) {
+      console.error(`Supabase insert error for tweet ${tweet.id}:`, error.message);
+    } else {
+      console.log(`Tweet ${tweet.id} logged to Supabase.`);
+    }
+
+  } catch (err) {
+    console.error(`Error handling tweet ${tweet.id}:`, err.response?.data || err.message);
   }
 }
 
