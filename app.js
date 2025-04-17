@@ -60,7 +60,6 @@ function getFullTweetText(tweet, includes) {
             }
           });
         }
-        referencedFullText = referencedFullText.replace(/\n/g, " ");
         if (refTweet.type === "quoted") {
           let quotedUser = includes.users.find(u => u.id === referencedTweet.author_id);
           let quotedUsername = quotedUser ? quotedUser.username : "unknown";
@@ -73,7 +72,6 @@ function getFullTweetText(tweet, includes) {
       }
     });
   }
-  fullText = fullText.replace(/\n/g, ' '); // Remove line breaks
   return fullText;
 }
 
