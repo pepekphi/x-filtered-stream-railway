@@ -110,7 +110,7 @@ async function forwardTweet(tweet, includes) {
       .insert([{
         post_id:       tweet.id,
         timestamp:     tweet.created_at,
-        x_id:          tweet.author_id,
+        x_id:          username,
         conversation_id: tweet.conversation_id,
         text:          fullTweetText,
         expanded_url:  tweetExpandedURL,
