@@ -86,7 +86,11 @@ async function forwardTweet(tweet, includes) {
   // Ensure no line breaks
   fullTweetText = fullTweetText.replace(/\n/g, ' ');
 
-  const tweetExpandedURL = /* your existing logic */;
+  const tweetExpandedURL = tweet.entities && tweet.entities.urls && tweet.entities.urls.length > 0
+    ? tweet.entities.urls.reduce((max, current) => {
+        return current.expanded_url.length > max.expanded_url.length ? current : max;
+      }, tweet.entities.urls[0]).expanded_url
+    : "";
 
   const payload = {
     timestamp: tweet.created_at,
